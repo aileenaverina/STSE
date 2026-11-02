@@ -1,0 +1,26 @@
+{
+  "name": "cart-api",
+  "version": "1.0.0",
+  "description": "API keranjang belanja sederhana untuk demo CI dengan Jenkins",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "jest",
+    "test:ci": "jest --ci --coverage --reporters=default --reporters=jest-junit"
+  },
+  "jest": {
+    "testEnvironment": "node"
+  },
+  "jest-junit": {
+    "outputDirectory": "reports",
+    "outputName": "junit.xml"
+  },
+  "dependencies": {
+    "express": "^4.22.3"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "jest-junit": "^16.0.0",
+    "supertest": "^7.3.1"
+  }
+}
