@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Movie Catalog</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="config.js"></script>
+</head>
+
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+
+    <header class="bg-gradient-to-r from-slate-900 via-indigo-900 to-blue-800 text-white py-10 text-center">
+        <h1 class="text-3xl font-extrabold tracking-tight">🎬 Movie Catalog</h1>
+        <p class="text-sm text-blue-200 mt-1">Jelajahi film berdasarkan judul, genre, dan tahun</p>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 pb-10">
+
+        <!-- Search, filter, sort -->
+        <section class="sticky top-0 z-10 -mt-6 mb-6">
+            <div class="bg-white/95 backdrop-blur rounded-2xl shadow-lg p-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-3">
+                    <div class="md:col-span-3 lg:col-span-2">
+                        <label class="block text-xs font-semibold text-slate-500 mb-1" for="search">Cari judul</label>
+                        <input id="search" type="text" placeholder="contoh: avengers"
+                            class="w-full border border-slate-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1" for="genre">Genre</label>
+                        <select id="genre"
+                            class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">Semua genre</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1" for="year">Tahun</label>
+                        <select id="year"
+                            class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">Semua tahun</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-semibold text-slate-500 mb-1" for="sort">Urutkan</label>
+                        <select id="sort"
+                            class="w-full border border-slate-300 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">Default</option>
+                            <option value="rating_desc">Rating tertinggi</option>
+                            <option value="rating_asc">Rating terendah</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex items-center justify-between mt-3">
+                    <span id="loading" class="text-sm text-slate-500">Loading...</span>
+                    <button id="btn-reset"
+                        class="px-4 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-sm font-medium">Reset</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Movie list -->
+        <section id="movie-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-5"></section>
+
+        <div id="empty" class="hidden bg-white rounded-2xl shadow p-10 text-center text-slate-500">
+            <div class="text-4xl mb-2">🔍</div>
+            Tidak ada film yang cocok.
+        </div>
+
+        <nav id="pagination" class="flex flex-wrap justify-center items-center gap-1 mt-8"></nav>
+    </main>
+    <script>
+        // ######################## //
+        // ######### Node ######### //
+        // ######################## //
+        const nodeSearch = $("#search");
+        const nodeGenre = $("#genre");
+        const nodeYear = $("#year");
+        const nodeSort = $("#sort");
+
+        const nodeReset = $("#btn-reset");
+
+        const nodeStatus = $("#loading");
+
+        const nodeGrid = $("#movie-grid");
+
+        const nodeEmpty = $("#empty");
+
+        const nodePagination = $("#pagination");
+
+        let halamanSekarang = 1;
+        let halamanMaksimal = 1;
+        let timer = undefined;
+        let ajaxReqMovie = undefined;
+
+        // ######################## //
+        // ######### DATA ######### //
+        // ######################## //
+        const PLACEHOLDER = "data:image/svg+xml;utf8," + encodeURIComponent(
+            "<svg xmlns='http://www.w3.org/2000/svg' width='300' height='450'>" +
+            "<rect width='100%' height='100%' fill='#e2e8f0'/>" +
+            "<text x='50%' y='50%' fill='#94a3b8' font-family='Arial' font-size='18' text-anchor='middle'>No Image</text></svg>"
+        );
+
+        // ########################### //
+        // ##### Function Helper #####
+        // ########################### //
+        // Menampilkan Pagination
+        const MenampilkanPagination = () => {
+            // Cek apakah terdapat pagination
+            if (halamanMaksimal <= 1) {
+                nodePagination.html("");
+                return;
+            }
+
+            let html = "";
+
+            // Jika halaman saat ini lebih besar dari 1,
+            // tambahkan button previous
+            if (halamanSekarang > 1) {
+                html += `
+                    <button data-page="${halamanSekarang - 1}" class="min-w-[2.5rem] h-10 px-3 rounded-lg text-sm font-medium border bg-white text-slate-700 border-slate-300 hover:bg-indigo-50">
+                        &lt; Prev
+                    </button>
+                `;
+            }
+
+            html += `<span class="px-3 text-sm text-slate-600">Halaman ${halamanSekarang} dari ${halamanMaksimal}</span>`;
+
+            // Jika halaman saat ini lebih kecil dari halaman maksimal,
+            // tambahkan button next
+            if (halamanSekarang < halamanMaksimal) {
+                html += `
+                    <button data-page="${halamanSekarang + 1}" class="min-w-[2.5rem] h-10 px-3 rounded-lg text-sm font-medium border bg-white text-slate-700 border-slate-300 hover:bg-indigo-50">
+                        Next >
+                    </button>
+                `;
+            }
+
+            nodePagination.html(html);
+        };
+
+        // Membuat card movie untuk ditampilkan di grid
+        const BuatCardMovie = m => {
+            // Post
+            let poster = m.poster_url;
+            if (!poster || poster == "NULL") poster = PLACEHOLDER;
+
+            // Rating
+            let rating = parseFloat(m.rating);
+            if (isNaN(rating)) rating = "-";
+            else rating = rating.toFixed(1);
+
+            // Waktu
+            let waktu = '-';
+            if (m.release_date) {
+                waktu = new Date(m.release_date);
+                if (!isNaN(waktu)) waktu = waktu.getUTCFullYear();
+            }
+
+            // Genre
+            let genre = (m.genres || m.genre);
+            genre = String(genre || "")
+                .replaceAll("[", "")
+                .replaceAll("]", "")
+                .replaceAll("'", "")
+                .replaceAll('"', "");
+            const daftarGenre = genre.split(",");
+
+            let htmlGenre = "";
+            for (let i = 0; i < daftarGenre.length; i++) {
+                const nama = daftarGenre[i].trim();
+                if (nama != "") {
+                    htmlGenre += `<span class="text-[11px] bg-indigo-50 text-indigo-700 rounded-full px-2 py-0.5">${nama}</span>`;
+                }
+            }
+
+            return `
+                <a href="detail.html?id=${m.id}" class="group bg-white rounded-2xl shadow-sm hover:shadow-xl hover:-translate-y-1 transition duration-200 overflow-hidden flex flex-col">
+                    <div class="relative">
+                        <img class="w-full aspect-[2/3] object-cover bg-slate-200" loading="lazy"
+                            src="${poster}" alt="${m.title}" />
+                        <span class="absolute top-2 right-2 bg-black/75 text-yellow-300 text-xs font-bold rounded-full px-2 py-1">
+                            ⭐ ${rating}
+                        </span>
+                    </div>
+                    <div class="p-4 flex flex-col gap-2">
+                        <h2 class="font-bold leading-snug line-clamp-2">${m.title || "No Title"}</h2>
+                        <div class="text-xs text-slate-500">${waktu}</div>
+                        <div class="flex flex-wrap gap-1">${htmlGenre}</div>
+                        <p class="text-sm text-slate-600 leading-relaxed line-clamp-3">${m.overview || "No overview available."}</p>
+                    </div>
+                </a>`;
+        };
+
+        const MenampilkanListMovie = res => {
+            // Cek apakah data movie keseluruhan kosong / tidak ada data movie yang cocok dengan filter / pencarian
+            if (res.total == 0 || res.data.length == 0) {
+                nodeStatus.text('Tidak ada film yang cocok dengan filter atau pencarian.');
+                nodeGrid.html(" ");
+                nodePagination.html("");
+                nodeEmpty.removeClass("hidden");
+                return;
+            }
+
+            nodeEmpty.addClass("hidden");
+
+            const mulai = (res.page - 1) * res.per_page + 1;        // Halaman saat ini - 1) * Jumlah movie dalam 1 page + 1 (agar melebihi page sebelumnya)
+            const akhir = mulai + res.data.length - 1;              // Movie pertama + total movie - 1 (karena mulai dari 1) 
+            nodeStatus.text(`Film ${mulai}-${akhir} dari ${res.total} (halaman ${res.page}/${res.total_pages})`);
+
+            let kartu = "";
+            for (let i = 0; i < res.data.length; i++) {
+                kartu += BuatCardMovie(res.data[i]);
+            }
+            nodeGrid.html(kartu);
+
+            MenampilkanPagination();
+        };
+
+        const ResetOrSearch = () => {
+            halamanSekarang = 1;
+            MengambilMovie();
+        };
+
+        // ##################################### //
+        // ####### Function Panggil Ajax ####### //
+        // ##################################### //
+        const MengambilMovie = () => {
+            // Mencek request sebelumnya apakah ada, jika ada maka batalkan request sebelumnya
+            if (ajaxReqMovie) {
+                ajaxReqMovie.abort();
+            }
+
+            // Menampilkan Loading Movie awal
+            nodeStatus.text("Loading movies...");
+            nodeGrid.html('<div class="bg-white rounded-2xl h-96 animate-pulse"></div>'.repeat(8));
+            nodeEmpty.addClass("hidden");
+
+            ajaxReqMovie = $.ajax({
+                url: API_BASE + "/movies",
+                type: "GET",
+                dataType: "json",
+                data: {
+                    page: halamanSekarang,
+                    search: nodeSearch.val().trim(),
+                    genre: nodeGenre.val(),
+                    year: nodeYear.val(),
+                    sort: nodeSort.val()
+                },
+                success: res => {
+                    halamanMaksimal = res.total_pages;
+                    MenampilkanListMovie(res);
+                },
+                error: (xhr, textStatus) => {
+                    nodeGrid.html("");
+                    nodePagination.html("");
+                    nodeStatus.text("Error: gagal mengambil data (" + textStatus + ")");
+                }
+            });
+        };
+
+        const MengambilFilter = () => {                 // Mengambil data filter genre dan tahun berdasarkan database Movies
+            $.ajax({
+                url: API_BASE + "/filters",
+                type: "GET",
+                dataType: "json",
+                success: res => {
+                    const genres = res.genres || [];
+                    for (let i = 0; i < genres.length; i++) {
+                        nodeGenre.append(`<option value="${genres[i]}">${genres[i]}</option>`);
+                    }
+
+                    const years = res.years || [];
+                    for (let i = 0; i < years.length; i++) {
+                        nodeYear.append(`<option value="${years[i]}">${years[i]}</option>`);
+                    }
+                },
+                error: (xhr, textStatus) => {
+                    console.error("Gagal mengambil filter:", textStatus);
+                }
+            });
+        };
+
+        // ############### //
+        // #### Event #### //
+        // ############### //
+        nodeSearch.on("input", () => {
+            clearTimeout(timer);
+            timer = setTimeout(ResetOrSearch, 300);
+        });
+
+        nodeGenre.on("change", ResetOrSearch);
+        nodeYear.on("change", ResetOrSearch);
+        nodeSort.on("change", ResetOrSearch);
+
+        nodeReset.on("click", () => {
+            nodeSearch.val("");
+            nodeGenre.val("");
+            nodeYear.val("");
+            nodeSort.val("");
+            ResetOrSearch();
+        });
+
+        nodePagination.on("click", "button[data-page]", function () {
+            halamanSekarang = Number($(this).data("page"));                 // Mengambil page tujuan 
+            MengambilMovie();
+        });
+
+        // ############## //
+        // #### Init #### //
+        // ############## //
+        MengambilFilter();
+        MengambilMovie();
+    </script>
+</body>
+
+</html>

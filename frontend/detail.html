@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Detail Movie</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+  <script src="config.js"></script>
+</head>
+
+<body class="bg-slate-100 text-slate-800 min-h-screen">
+  <header class="bg-gradient-to-r from-slate-900 via-indigo-900 to-blue-800 text-white py-10 text-center">
+    <h1 class="text-3xl font-extrabold">🎬 Detail Movie</h1>
+    <p class="text-sm text-blue-200 mt-1">Informasi lengkap film pilihanmu</p>
+  </header>
+
+  <main class="max-w-5xl mx-auto px-4 py-8">
+    <a href="index.html"
+       class="inline-block mb-6 text-indigo-700 font-semibold hover:underline">
+      ← Kembali ke daftar film
+    </a>
+
+    <div id="status" role="status"
+         class="bg-white rounded-2xl shadow p-6 text-slate-500">
+      Memuat detail film...
+    </div>
+
+    <section id="movie-detail"
+             class="hidden bg-white rounded-2xl shadow-lg p-6 md:p-8">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <div>
+          <img id="poster"
+               class="w-full max-w-sm mx-auto aspect-[2/3] object-cover rounded-xl bg-slate-200"
+               alt="Poster film" />
+        </div>
+
+        <div class="md:col-span-2">
+          <h2 id="title" class="text-3xl font-bold"></h2>
+          <p id="tagline" class="hidden italic text-slate-500 mt-2"></p>
+
+          <div class="flex flex-wrap gap-2 mt-4">
+            <span id="rating"
+                  class="bg-yellow-100 text-yellow-800 rounded-full px-3 py-1 text-sm"></span>
+            <span id="certification"
+                  class="bg-slate-100 rounded-full px-3 py-1 text-sm"></span>
+          </div>
+
+          <dl class="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-6">
+            <div>
+              <dt class="text-sm text-slate-500">Sutradara</dt>
+              <dd id="director" class="font-semibold"></dd>
+            </div>
+            <div>
+              <dt class="text-sm text-slate-500">Tanggal rilis</dt>
+              <dd id="release-date" class="font-semibold"></dd>
+            </div>
+            <div>
+              <dt class="text-sm text-slate-500">Durasi</dt>
+              <dd id="runtime" class="font-semibold"></dd>
+            </div>
+            <div>
+              <dt class="text-sm text-slate-500">Genre</dt>
+              <dd id="genres" class="font-semibold"></dd>
+            </div>
+          </dl>
+
+          <h3 class="text-lg font-bold mt-8 mb-2">Sinopsis</h3>
+          <p id="overview"
+             class="text-slate-600 leading-relaxed whitespace-pre-line"></p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    // Gambar pengganti jika poster kosong atau gagal dimuat
+    const PLACEHOLDER = "data:image/svg+xml;utf8," + encodeURIComponent(
+      "<svg xmlns='http://www.w3.org/2000/svg' width='300' height='450'>" +
+      "<rect width='100%' height='100%' fill='#e2e8f0'/>" +
+      "<text x='50%' y='50%' fill='#94a3b8' font-family='Arial' " +
+      "font-size='18' text-anchor='middle'>No Image</text></svg>"
+    );
+
+    // Mengubah genre berbentuk string list Python menjadi teks yang mudah dibaca
+    function formatGenres(value) {
+      if (Array.isArray(value)) return value.join(", ") || "-";
+      return String(value || "").replace(/[\[\]'"]/g, "").trim() || "-";
+    }
+
+    // Mendukung tanggal ISO maupun format tanggal dari Flask
+    function formatDate(value) {
+      if (!value) return "-";
+      const date = new Date(value);
+      if (isNaN(date.getTime())) return "-";
+
+      return date.toLocaleDateString("id-ID", {
+        day: "numeric",
+        month: "long",
+        year: "numeric",
+        timeZone: "UTC"
+      });
+    }
+
+    // Menampilkan data film dari respons backend
+    function renderMovie(movie) {
+      document.title = (movie.title || "Detail Movie") + " | Movie Catalog";
+
+      $("#title").text(movie.title || "Tanpa judul");
+      $("#director").text(movie.director || "-");
+      $("#release-date").text(formatDate(movie.release_date));
+      $("#runtime").text(
+        movie.runtime == null ? "-" : movie.runtime + " menit"
+      );
+      $("#genres").text(formatGenres(movie.genres));
+      $("#overview").text(movie.overview || "Sinopsis belum tersedia.");
+      $("#certification").text(movie.certification || "Klasifikasi belum tersedia");
+
+      const rating = parseFloat(movie.rating);
+      $("#rating").text(
+        Number.isNaN(rating) ? "⭐ Rating belum tersedia" : "⭐ " + rating.toFixed(1)
+      );
+
+      if (movie.tagline) {
+        $("#tagline").text(movie.tagline).removeClass("hidden");
+      }
+
+      // Hanya memakai URL HTTP/HTTPS untuk poster dari database
+      let poster = PLACEHOLDER;
+      try {
+        const url = new URL(movie.poster_url);
+        if (url.protocol === "http:" || url.protocol === "https:") {
+          poster = url.href;
+        }
+      } catch (error) {
+        poster = PLACEHOLDER;
+      }
+
+      $("#poster").attr({
+        src: poster,
+        alt: "Poster " + (movie.title || "film")
+      });
+
+      $("#status").addClass("hidden");
+      $("#movie-detail").removeClass("hidden");
+    }
+
+    // Mengambil ID dari detail.html?id=..., lalu meminta detail ke backend
+    function loadMovieDetail() {
+      const movieId = new URLSearchParams(window.location.search).get("id");
+
+      if (!movieId || !/^\d+$/.test(movieId)) {
+        $("#status").text("ID film tidak valid. Pilih film dari halaman daftar.");
+        return;
+      }
+
+      if (typeof API_BASE === "undefined") {
+        $("#status").text("Alamat API belum tersedia. Periksa config.js.");
+        return;
+      }
+
+      $.getJSON(
+        API_BASE.replace(/\/+$/, "") + "/movies/" + encodeURIComponent(movieId)
+      )
+        .done(function (res) {
+          if (!res.data || typeof res.data !== "object" || Array.isArray(res.data)) {
+            $("#status").text("Format respons detail film tidak sesuai.");
+            return;
+          }
+          renderMovie(res.data);
+        })
+        .fail(function (xhr) {
+          $("#status").text(
+            xhr.status === 404
+              ? "Movie tidak ditemukan."
+              : "Gagal memuat detail film. Periksa koneksi ke backend."
+          );
+        });
+    }
+
+    // Mengganti poster yang gagal dimuat
+    $("#poster").on("error", function () {
+      if (this.src !== PLACEHOLDER) this.src = PLACEHOLDER;
+    });
+
+    $(function () {
+      loadMovieDetail();
+    });
+  </script>
+</body>
+</html>

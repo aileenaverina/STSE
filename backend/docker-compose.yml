@@ -1,0 +1,11 @@
+version: '3.8'
+services:
+  flask:
+    build: .
+    container_name: flask-movie
+    ports:
+      - "50555:5000"
+    volumes:
+      - .:/app  # Allows live code updates
+    environment:
+      - FLASK_ENV=development 
